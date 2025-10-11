@@ -1,5 +1,5 @@
 from PySide2 import QtCore, QtGui, QtWidgets
-from shiboken2 import wrapInstance
+from shiboken2 import wrapInstance, isValid
 import maya.OpenMayaUI as omui
 
 PALETTE_BG = "#FFF4E6"
@@ -8,61 +8,59 @@ PALETTE_PURPLE = "#F2D4FF"
 PALETTE_TEXT = "#6B5B53"
 PALETTE_BORDER = "#F5C7E3"
 
-# ---------- Widgets ----------
 class PixelLabel(QtWidgets.QLabel):
     def __init__(self, text="", size=14, bold=False, parent=None):
-        super().__init__(text, parent)
+        super(PixelLabel, self).__init__(text, parent)
         f = self.font()
         f.setPointSize(size)
         f.setBold(bold)
         self.setFont(f)
-        self.setStyleSheet(f"color:{PALETTE_TEXT}")
-
+        self.setStyleSheet("color:%s" % PALETTE_TEXT)
 
 class StarButton(QtWidgets.QPushButton):
     def __init__(self, text="", parent=None):
-        super().__init__(text, parent)
+        super(StarButton, self).__init__(text, parent)
         self.setFixedSize(96, 96)
-        self.setText(text)
         self.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.setStyleSheet(f"""
-            QPushButton {{
+        self.setText(text)
+        self.setStyleSheet("""
+            QPushButton {
                 border: 0px;
-                background-color: {PALETTE_PINK};
+                background-color: %s;
                 border-radius: 20px;
                 font-size: 22px;
-            }}
-            QPushButton:hover {{ background-color: #FFD6F0; }}
-        """)
+            }
+            QPushButton:hover { background-color: #FFD6F0; }
+        """ % PALETTE_PINK)
 
-
+# ---------- วิวตัวละคร (QGraphicsView) ----------
 class GameView(QtWidgets.QGraphicsView):
-    """พื้นที่ตัวละคร + แอนิเมชันด้วย QVariantAnimation"""
+    # พื้นที่ตัวละคร + แอนิเมชันเด้งๆ
     def __init__(self, pet_pix_path=None, parent=None):
-        super().__init__(parent)
-        self.setScene(QtWidgets.QGraphicsScene(self))
+        super(GameView, self).__init__(parent)
+
+        # ปิดสกอร์บาร์ทั้งหมด
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+
+        # scene
+        scn = QtWidgets.QGraphicsScene(self)
+        self.setScene(scn)
         self.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.SmoothPixmapTransform)
         self.setStyleSheet("background:#FFFFFF; border:0px;")
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.scene().setSceneRect(0, 0, 640, 420)
+        scn.setSceneRect(0, 0, 640, 420)
 
-        # ตัวละคร: ถ้ามี path ให้โหลด, ไม่งั้นวาดวงกลมเป็น placeholder
         if pet_pix_path:
             pix = QtGui.QPixmap(pet_pix_path)
+            if pix.isNull():
+                pix = self._make_placeholder()
         else:
-            pix = QtGui.QPixmap(220, 220)
-            pix.fill(QtCore.Qt.transparent)
-            p = QtGui.QPainter(pix)
-            p.setRenderHint(QtGui.QPainter.Antialiasing)
-            p.setBrush(QtGui.QColor("#FFC0D9"))
-            p.setPen(QtGui.QPen(QtGui.QColor("#333"), 3))
-            p.drawEllipse(10, 10, 200, 200)
-            p.end()
+            pix = self._make_placeholder()
 
-        self.item = self.scene().addPixmap(pix)
-        self.item.setOffset(210, 140)
+        self.item = scn.addPixmap(pix)
+        self.item.setOffset(210, 140) 
 
-        # แอนิเมชันเด้ง: ใช้ QVariantAnimation (target ไม่ต้องเป็น QObject)
         self.anim = QtCore.QVariantAnimation(self)
         self.anim.setDuration(1200)
         self.anim.setStartValue(140.0)
@@ -72,15 +70,59 @@ class GameView(QtWidgets.QGraphicsView):
         self.anim.valueChanged.connect(self._on_anim_value)
         self.anim.start()
 
+    def _make_placeholder(self):
+        pix = QtGui.QPixmap(220, 220)
+        pix.fill(QtCore.Qt.transparent)
+        p = QtGui.QPainter(pix)
+        p.setRenderHint(QtGui.QPainter.Antialiasing)
+        p.setBrush(QtGui.QColor("#FFC0D9"))
+        p.setPen(QtGui.QPen(QtGui.QColor("#333"), 3))
+        p.drawEllipse(10, 10, 200, 200)
+        p.end()
+        return pix
+
     def _on_anim_value(self, v):
-        # อัปเดตตำแหน่ง Y ของไอเท็ม
+        if getattr(self, "item", None) is None:
+            if self.anim.state() == QtCore.QAbstractAnimation.Running:
+                self.anim.stop()
+            return
+        if not isValid(self.item):
+            if self.anim.state() == QtCore.QAbstractAnimation.Running:
+                self.anim.stop()
+            try:
+                self.anim.valueChanged.disconnect(self._on_anim_value)
+            except Exception:
+                pass
+            self.item = None
+            return
         self.item.setY(float(v))
 
+    def shutdown(self):
+        try:
+            if self.anim.state() == QtCore.QAbstractAnimation.Running:
+                self.anim.stop()
+            try:
+                self.anim.valueChanged.disconnect(self._on_anim_value)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        try:
+            if self.scene():
+                self.scene().clear()
+        except Exception:
+            pass
+        self.item = None
 
+    def closeEvent(self, e):
+        self.shutdown()
+        super(GameView, self).closeEvent(e)
+
+# ---------- ชิ้นส่วน UI อื่นๆ ----------
 class TopBar(QtWidgets.QWidget):
     def __init__(self):
-        super().__init__()
-        self.setStyleSheet(f"background:{PALETTE_BG}")
+        super(TopBar, self).__init__()
+        self.setStyleSheet("background:%s" % PALETTE_BG)
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(12)
@@ -103,11 +145,10 @@ class TopBar(QtWidgets.QWidget):
         h.addWidget(PixelLabel("bb13100", size=16, bold=True))
         lay.addWidget(coinWrap, 0, QtCore.Qt.AlignRight)
 
-
 class StatusBar(QtWidgets.QWidget):
     def __init__(self):
-        super().__init__()
-        self.setStyleSheet(f"background:{PALETTE_PINK}; border:2px solid {PALETTE_BORDER}; border-radius:12px;")
+        super(StatusBar, self).__init__()
+        self.setStyleSheet("background:%s; border:2px solid %s; border-radius:12px;" % (PALETTE_PINK, PALETTE_BORDER))
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(12, 8, 12, 8)
         lay.setSpacing(10)
@@ -119,16 +160,13 @@ class StatusBar(QtWidgets.QWidget):
             box = QtWidgets.QLabel(emoji)
             box.setAlignment(QtCore.Qt.AlignCenter)
             box.setFixedSize(42, 42)
-            box.setStyleSheet(f"background:#FFFFFF; border:2px solid {PALETTE_BORDER}; border-radius:8px;")
+            box.setStyleSheet("background:#FFFFFF; border:2px solid %s; border-radius:8px;" % PALETTE_BORDER)
             lay.addWidget(box)
-
 
 class GamePanel(QtWidgets.QFrame):
     def __init__(self, pet_pix_path=None):
-        super().__init__()
-        self.setStyleSheet(f"""
-            QFrame {{ background:#FFFFFF; border:3px solid {PALETTE_BORDER}; border-radius:14px; }}
-        """)
+        super(GamePanel, self).__init__()
+        self.setStyleSheet("QFrame { background:#FFFFFF; border:3px solid %s; border-radius:14px; }" % PALETTE_BORDER)
         v = QtWidgets.QVBoxLayout(self)
         v.setContentsMargins(10, 10, 10, 10)
         v.setSpacing(8)
@@ -141,17 +179,16 @@ class GamePanel(QtWidgets.QFrame):
         home = QtWidgets.QLabel("🏠")
         home.setFixedSize(36, 36)
         home.setAlignment(QtCore.Qt.AlignCenter)
-        home.setStyleSheet(f"background:#FFF1FC; border:2px solid {PALETTE_BORDER}; border-radius:8px;")
+        home.setStyleSheet("background:#FFF1FC; border:2px solid %s; border-radius:8px;" % PALETTE_BORDER)
         top.addWidget(home)
         v.addLayout(top)
 
         self.view = GameView(pet_pix_path)
         v.addWidget(self.view, 1)
 
-
 class BottomBar(QtWidgets.QWidget):
     def __init__(self):
-        super().__init__()
+        super(BottomBar, self).__init__()
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(0, 8, 0, 0)
         lay.setSpacing(20)
@@ -164,25 +201,50 @@ class BottomBar(QtWidgets.QWidget):
             lay.addWidget(b)
         lay.addStretch()
 
+# ---------- หน้าเริ่มเกม ----------
+class StartPage(QtWidgets.QWidget):
+    startClicked = QtCore.Signal() 
 
-class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, parent=None, pet_pix_path=None):
-        super().__init__(parent)
-        self.setWindowTitle("Pet Game UI - Maya")
-        self.resize(540, 820)
-        self.setStyleSheet(f"QMainWindow {{ background:{PALETTE_BG}; }}")
-
-        cw = QtWidgets.QWidget()
-        self.setCentralWidget(cw)
-        v = QtWidgets.QVBoxLayout(cw)
-        v.setContentsMargins(16, 16, 16, 16)
+    def __init__(self, parent=None):
+        super(StartPage, self).__init__(parent)
+        self.setStyleSheet("background:%s" % PALETTE_BG)
+        v = QtWidgets.QVBoxLayout(self)
+        v.setContentsMargins(24, 24, 24, 24)
         v.setSpacing(12)
 
+        title = PixelLabel("TAMATOTS", size=28, bold=True)
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        v.addWidget(title)
+
+        v.addStretch()
+
+        startBtn = QtWidgets.QPushButton("Start")
+        startBtn.setFixedHeight(70)
+        startBtn.setFixedWidth(250)
+        startBtn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        startBtn.setStyleSheet("""
+            QPushButton { background:#FFFFFF; border:3px solid %s; border-radius:14px; font-size:20px; color:%s; }
+            QPushButton:hover { background:#FFEFFC; }
+        """ % (PALETTE_BORDER, PALETTE_TEXT))
+        startBtn.clicked.connect(self.startClicked.emit)
+        v.addWidget(startBtn, 0, QtCore.Qt.AlignCenter)
+
+        v.addStretch()
+
+# ---------- หน้าเกมหลัก ----------
+class GamePage(QtWidgets.QWidget):
+    def __init__(self, pet_pix_path=None, parent=None):
+        super(GamePage, self).__init__(parent)
+        self.setStyleSheet("background:%s" % PALETTE_BG)
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(12)
+
         self.topbar = TopBar()
-        v.addWidget(self.topbar)
+        outer.addWidget(self.topbar)
 
         panel = QtWidgets.QFrame()
-        panel.setStyleSheet(f"QFrame {{ background:{PALETTE_PURPLE}; border:3px solid {PALETTE_BORDER}; border-radius:14px; }}")
+        panel.setStyleSheet("QFrame { background:%s; border:3px solid %s; border-radius:14px; }" % (PALETTE_PURPLE, PALETTE_BORDER))
         pv = QtWidgets.QVBoxLayout(panel)
         pv.setContentsMargins(12, 12, 12, 12)
         pv.setSpacing(10)
@@ -190,29 +252,52 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status = StatusBar()
         pv.addWidget(self.status)
 
-        self.game = GamePanel(pet_pix_path)
-        pv.addWidget(self.game, 1)
+        self.gamePanel = GamePanel(pet_pix_path)
+        pv.addWidget(self.gamePanel, 1)
 
-        v.addWidget(panel, 1)
+        outer.addWidget(panel, 1)
 
         self.bottom = BottomBar()
-        v.addWidget(self.bottom)
+        outer.addWidget(self.bottom)
 
-        # demo signals
-        self.bottom.btnEat.clicked.connect(lambda: self.flash_message("Yummy!"))
-        self.bottom.btnWash.clicked.connect(lambda: self.flash_message("Splash!"))
-        self.bottom.btnWater.clicked.connect(lambda: self.flash_message("Glug glug"))
-        self.bottom.btnHeal.clicked.connect(lambda: self.flash_message("Feel better!"))
+        self.bottom.btnEat.clicked.connect(lambda: self.flash_message("อร่อยยย!"))
+        self.bottom.btnWash.clicked.connect(lambda: self.flash_message("สดชื่นนนน!"))
+        self.bottom.btnWater.clicked.connect(lambda: self.flash_message("อึก อึก"))
+        self.bottom.btnHeal.clicked.connect(lambda: self.flash_message("รู้สึกดีมากกก!"))
 
     def flash_message(self, text):
-        m = QtWidgets.QLabel(text, self.game)
-        m.setStyleSheet("background:#000000AA; color:white; padding:6px 10px; border-radius:8px;")
+        m = QtWidgets.QLabel(text, self.gamePanel)
+        m.setStyleSheet("background:#000000AA; color:black; padding:6px 10px; border-radius:8px;")
         m.adjustSize()
-        m.move(20, 20)
+        m.move(200, 20)
         m.show()
         QtCore.QTimer.singleShot(800, m.deleteLater)
 
-# ---------- Maya helpers / run() ----------
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self, parent=None, pet_pix_path=None):
+        super(MainWindow, self).__init__(parent)
+        self.setWindowTitle("Pet Game UI - Maya")
+        self.resize(540, 820)
+        self.setStyleSheet("QMainWindow { background:%s; }" % PALETTE_BG)
+
+        self.stacked = QtWidgets.QStackedWidget()
+        self.setCentralWidget(self.stacked)
+
+        self.startPage = StartPage()
+        self.gamePage = GamePage(pet_pix_path=pet_pix_path)
+
+        self.stacked.addWidget(self.startPage) 
+        self.stacked.addWidget(self.gamePage)  
+
+        self.startPage.startClicked.connect(lambda: self.stacked.setCurrentIndex(1))
+
+    def closeEvent(self, e):
+        try:
+            self.gamePage.gamePanel.view.shutdown()
+        except Exception:
+            pass
+        super(MainWindow, self).closeEvent(e)
+
 def _maya_main_window():
     ptr = omui.MQtUtil.mainWindow()
     return wrapInstance(int(ptr), QtWidgets.QWidget)
@@ -220,14 +305,20 @@ def _maya_main_window():
 _window = None
 
 def run(pet_pix_path=None):
-    """เรียกจาก Maya: import pet_game; pet_game.run('C:/path/to/pet.png')"""
+    """
+    เรียกจาก Maya:
+        import pet_game
+        pet_game.run('C:/path/to/pet.png')
+    ถ้าไม่ส่ง path มาก็มี placeholder ให้
+    """
     global _window
-    if _window:
-        try:
+    try:
+        if _window:
             _window.close()
             _window.deleteLater()
-        except Exception:
-            pass
+    except Exception:
+        pass
+
     parent = _maya_main_window()
     _window = MainWindow(parent=parent, pet_pix_path=pet_pix_path)
     _window.show()
