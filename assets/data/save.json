@@ -1,0 +1,31 @@
+{
+  "volume": 10,
+  "stats": {
+    "hunger": 79.52235097810629,
+    "clean": 79.60195914842188,
+    "fun": 79.4427428077906,
+    "health": 79.84078365936873
+  },
+  "cfg": {
+    "decay_per_hour": {
+      "hunger": 6,
+      "clean": 5,
+      "fun": 7,
+      "health": 2
+    },
+    "min_tick_secs": 2,
+    "autosave_secs": 12
+  },
+  "poops": [],
+  "poop_cfg": {
+    "spawn_min_sec": 90,
+    "spawn_max_sec": 240,
+    "max_on_field": 5,
+    "decay_clean_per_min": 2,
+    "offline_spawn_per_hour": 1,
+    "offline_spawn_cap": 6,
+    "clean_reward": 8,
+    "coin_reward": 0
+  },
+  "last_seen": "2025-10-17T20:28:46.702723+00:00"
+}

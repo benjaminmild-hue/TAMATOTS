@@ -7,6 +7,7 @@ from PySide2.QtGui import QFontDatabase, QFont
 from PySide2.QtMultimedia import QMediaPlayer, QMediaContent, QMediaPlaylist
 from shiboken2 import wrapInstance, isValid
 
+# ---- Maya detection ----
 IN_MAYA = False
 try:
     import maya.OpenMayaUI as omui  # type: ignore
@@ -14,6 +15,7 @@ try:
 except Exception:
     omui = None
 
+# ---- Theme ----
 PALETTE_BG = "#FFF4E6"
 PALETTE_PINK = "#FAD0EB"
 PALETTE_PURPLE = "#F2D4FF"
@@ -21,6 +23,7 @@ PALETTE_TEXT = "#6B5B53"
 PALETTE_BORDER = "#F5C7E3"
 HILITE = "#7A6C8F"
 
+# ---- Paths ----
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
 IMG_DIR   = os.path.join(BASE_DIR, "assets", "images")
 SND_PATH  = os.path.join(BASE_DIR, "assets", "sound", "soundtrack.mp3")
@@ -28,9 +31,13 @@ DATA_DIR  = os.path.join(BASE_DIR, "assets", "data")
 SAVE_PATH = os.path.join(DATA_DIR, "save.json")
 FONT_PATH = os.path.join(BASE_DIR, "assets", "font", "TA 8 bit.ttf")
 
+BG_DIR           = os.path.join(BASE_DIR, "assets", "backgrounds")
+START_BG_PATH    = os.path.join(BG_DIR, "startBackground.png")
+START_BTN_PATH   = os.path.join(BG_DIR, "startButton.png")
+
 PREFERRED_IMAGES = ["novvel.png", "tama.png"]
 
-
+# ---- Utils ----
 def ensure_dirs():
     if not os.path.isdir(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
@@ -90,7 +97,7 @@ def list_pet_images():
                     items.append((base, fp))
     return items
 
-
+# ---- Music ----
 class BackgroundMusic(QtCore.QObject):
     """ควบคุมเพลงพื้นหลังด้วย QMediaPlayer/QMediaPlaylist"""
     def __init__(self, parent=None, volume=10):
@@ -117,7 +124,7 @@ class BackgroundMusic(QtCore.QObject):
         self.player.setMuted(not self.player.isMuted())
         return self.player.isMuted()
 
-
+# ---- Basic widgets ----
 class PixelLabel(QtWidgets.QLabel):
     """QLabel ปรับขนาด/หนา พร้อมโทนสีธีม"""
     def __init__(self, text="", size=14, bold=False, parent=None):
@@ -125,7 +132,6 @@ class PixelLabel(QtWidgets.QLabel):
         f = self.font(); f.setPointSize(size); f.setBold(bold)
         self.setFont(f)
         self.setStyleSheet(f"color:{PALETTE_TEXT}")
-
 
 class StarButton(QtWidgets.QPushButton):
     """ปุ่มทรงสี่เหลี่ยมมุมมนขนาดใหญ่สำหรับ action หลัก"""
@@ -142,7 +148,7 @@ class StarButton(QtWidgets.QPushButton):
             QPushButton:hover {{ background-color: #FFD6F0; }}
         """)
 
-
+# ---- Poop ----
 class PoopItem(QtWidgets.QGraphicsTextItem):
     """อีโม่จิ 💩 ในฉาก คลิกเพื่อเก็บ"""
     def __init__(self, pid: str, x: float, y: float, on_clicked, parent=None):
@@ -170,7 +176,7 @@ class PoopItem(QtWidgets.QGraphicsTextItem):
             self.on_clicked(self.pid)
         super().mousePressEvent(e)
 
-
+# ---- Scene/View ----
 class GameView(QtWidgets.QGraphicsView):
     """พื้นที่ฉาก: ตัวสัตว์เดินซ้าย-ขวา บ๊อบขึ้นลง พลิกทิศ และมีระบบวาง/เก็บ 💩"""
     def __init__(self, pet_pix_path=None, parent=None):
@@ -266,6 +272,7 @@ class GameView(QtWidgets.QGraphicsView):
         self._flip_if_needed(self.speed > 0)
         self.item.setPos(x, y)
 
+    # poop api
     def set_poop_click_callback(self, cb):
         self._poop_click_cb = cb
 
@@ -297,7 +304,7 @@ class GameView(QtWidgets.QGraphicsView):
         self._place_on_ground(center=False)
         super().resizeEvent(e)
 
-
+# ---- UI Blocks ----
 class TopBar(QtWidgets.QWidget):
     """ท็อปบาร์: ปุ่ม Settings และเหรียญ"""
     settingClicked = QtCore.Signal()
@@ -322,7 +329,6 @@ class TopBar(QtWidgets.QWidget):
         h.addWidget(PixelLabel("🪙", size=18)); h.addWidget(PixelLabel("bb13100", size=16, bold=True))
         lay.addWidget(coinWrap, 0, QtCore.Qt.AlignRight)
 
-
 class GamePanel(QtWidgets.QFrame):
     """กรอบเกม: ชื่อสัตว์และ GameView"""
     def __init__(self, pet_pix_path=None, pet_name=""):
@@ -340,7 +346,6 @@ class GamePanel(QtWidgets.QFrame):
 
         self.view = GameView(pet_pix_path); v.addWidget(self.view, 1)
 
-
 class BottomBar(QtWidgets.QWidget):
     """ปุ่มคำสั่งหลัก: Wash/Eat/Water/Heal"""
     def __init__(self):
@@ -352,26 +357,68 @@ class BottomBar(QtWidgets.QWidget):
         for b in (self.btnWash, self.btnEat, self.btnWater, self.btnHeal): lay.addWidget(b)
         lay.addStretch()
 
-
+# ---- Pages ----
 class StartPage(QtWidgets.QWidget):
-    """หน้าเริ่มต้น พร้อมปุ่ม Start Game"""
+    """หน้าเริ่มต้น: พื้นหลังเป็นรูป + ปุ่ม Start เป็นรูป"""
     startClicked = QtCore.Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(f"background:{PALETTE_BG}")
-        v = QtWidgets.QVBoxLayout(self); v.setContentsMargins(24,24,24,24); v.setSpacing(12)
-        title = PixelLabel("TAMATOTS", size=28, bold=True); title.setAlignment(QtCore.Qt.AlignCenter); v.addWidget(title)
+        # พื้นหลังใช้ QPalette + scaled pixmap (cover/expand)
+        self._bg_pix = QtGui.QPixmap(START_BG_PATH) if os.path.exists(START_BG_PATH) else None
+        self.setAutoFillBackground(True)
+        self._apply_background()
+
+        v = QtWidgets.QVBoxLayout(self)
+        v.setContentsMargins(24, 24, 24, 24)
         v.addStretch()
-        btn = QtWidgets.QPushButton("Start Game")
-        btn.setFixedHeight(70); btn.setFixedWidth(250)
-        btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        btn.setStyleSheet(f"""
-            QPushButton {{ background:#FFFFFF; border:3px solid {PALETTE_BORDER}; border-radius:14px; font-size:20px; color:{PALETTE_TEXT}; }}
+
+        # ปุ่มเป็นรูปภาพ
+        self.startBtn = QtWidgets.QPushButton()
+        self.startBtn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        if os.path.exists(START_BTN_PATH):
+            btn_pix = QtGui.QPixmap(START_BTN_PATH)
+            if not btn_pix.isNull():
+                target_w = 250
+                btn_pix = btn_pix.scaledToWidth(target_w, QtCore.Qt.SmoothTransformation)
+                self.startBtn.setIcon(QtGui.QIcon(btn_pix))
+                self.startBtn.setIconSize(btn_pix.size())
+                self.startBtn.setFixedSize(btn_pix.size())
+                self.startBtn.setFlat(True)
+                self.startBtn.setStyleSheet("QPushButton { border: 0; background: transparent; }")
+            else:
+                self._fallback_start_button()
+        else:
+            self._fallback_start_button()
+
+        self.startBtn.clicked.connect(self.startClicked.emit)
+        v.addWidget(self.startBtn, 0, QtCore.Qt.AlignHCenter)
+        v.addStretch()
+
+        # ถ้าอยากมีโลโก้/ชื่อเกมทับพื้นหลัง: เติม QLabel ด้านบนได้
+        # title = PixelLabel("TAMATOTS", size=28, bold=True); title.setAlignment(QtCore.Qt.AlignCenter)
+        # v.insertWidget(0, title)
+
+    def _fallback_start_button(self):
+        self.startBtn.setText("Start Game")
+        self.startBtn.setFixedSize(250, 70)
+        self.startBtn.setStyleSheet(f"""
+            QPushButton {{ background:#FFFFFF; border:3px solid {PALETTE_BORDER};
+                           border-radius:14px; font-size:20px; color:{PALETTE_TEXT}; }}
             QPushButton:hover {{ background:#FFEFFC; }}
         """)
-        btn.clicked.connect(self.startClicked.emit)
-        v.addWidget(btn, 0, QtCore.Qt.AlignCenter); v.addStretch()
 
+    def _apply_background(self):
+        pal = self.palette()
+        if self._bg_pix and not self._bg_pix.isNull():
+            scaled = self._bg_pix.scaled(self.size(), QtCore.Qt.KeepAspectRatioByExpanding, QtCore.Qt.SmoothTransformation)
+            pal.setBrush(QtGui.QPalette.Window, QtGui.QBrush(scaled))
+        else:
+            pal.setColor(QtGui.QPalette.Window, QtGui.QColor(PALETTE_BG))
+        self.setPalette(pal)
+
+    def resizeEvent(self, e):
+        self._apply_background()
+        super().resizeEvent(e)
 
 class GamePage(QtWidgets.QWidget):
     """หน้าหลักของเกม: สถานะ (bars/หัวใจ), ฉาก, ปุ่มล่าง"""
@@ -438,7 +485,7 @@ class GamePage(QtWidgets.QWidget):
     def set_pet_title(self, name: str):
         self.gamePanel.title.setText(name or "Your Pet")
 
-
+# ---- Dialogs ----
 class SelectPetDialog(QtWidgets.QDialog):
     """ไดอะล็อกเลือกสัตว์ (ปุ่มเล็กด้านล่าง) + ตั้งชื่อ"""
     def __init__(self, parent=None):
@@ -525,7 +572,6 @@ class SelectPetDialog(QtWidgets.QDialog):
         _, path = self.pets[self.selected_index]
         return {"pet_name": self.nameEdit.text().strip(), "pet_image": path}
 
-
 class SettingsDialog(QtWidgets.QDialog):
     """ตั้งค่าเสียง + ปุ่ม Back to Start (modal)"""
     backToStart = QtCore.Signal()
@@ -564,13 +610,13 @@ class SettingsDialog(QtWidgets.QDialog):
         self.backToStart.emit()
         self.accept()
 
-
+# ---- Main Window ----
 class MainWindow(QtWidgets.QMainWindow):
     """หน้าต่างหลัก: จัดการ state, เพลง, หน้าต่างย่อย, สถานะ และตัวจับเวลา"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Pet Game UI")
-        self.resize(560, 840)
+        self.setFixedSize(560, 840)
         self.setStyleSheet(f"QMainWindow {{ background:{PALETTE_BG}; }}")
 
         self.state = load_save() or {}
@@ -624,6 +670,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.poopDecayTimer.timeout.connect(self._on_poop_decay_minute)
         self.poopDecayTimer.start(60_000)
 
+    # offline corrections
     def apply_offline_decay(self):
         hrs = hours_between(self.state.get("last_seen"))
         if hrs <= 0:
@@ -645,6 +692,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self._offline_poop_to_place = n_new
 
+    # flow
     def on_start_clicked(self):
         has_pet = bool(self.state.get("pet_name")) and bool(self.state.get("pet_image")) and os.path.exists(self.state.get("pet_image",""))
         if not has_pet:
@@ -704,6 +752,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 p["x"], p["y"] = x, y
             v.spawn_poop(p["id"], x, y)
 
+    # settings
     def open_settings(self):
         dlg = SettingsDialog(self, current_volume=self.music.volume())
         dlg.slider.valueChanged.connect(self.on_volume_changed)
@@ -718,6 +767,7 @@ class MainWindow(QtWidgets.QMainWindow):
         save_save(self.state)
         self.stacked.setCurrentWidget(self.startPage)
 
+    # actions
     def add_stat(self, key, delta):
         s = self.state["stats"]
         s[key] = clamp(s.get(key, 80) + delta, 0, 100)
@@ -764,6 +814,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_stat("health", +20)
         self.refresh_ui(); save_save(self.state)
 
+    # poop timers
     def _schedule_next_poop(self):
         cfg = self.state["poop_cfg"]
         sec = random.randint(cfg["spawn_min_sec"], cfg["spawn_max_sec"])
@@ -799,6 +850,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.add_stat("clean", +self.state["poop_cfg"]["clean_reward"])
             self.refresh_ui(); save_save(self.state)
 
+    # ticking
     def _on_tick(self):
         now = time.time()
         dt = now - self.last_tick
@@ -829,14 +881,14 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception: pass
         super().closeEvent(e)
 
-
+# ---- Maya parent ----
 def _maya_main_window():
     if IN_MAYA and omui is not None:
         ptr = omui.MQtUtil.mainWindow()
         return wrapInstance(int(ptr), QtWidgets.QWidget)
     return None
 
-
+# ---- Entry ----
 def run():
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
     if os.path.exists(FONT_PATH):
