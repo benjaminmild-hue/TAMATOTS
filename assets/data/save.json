@@ -1,0 +1,33 @@
+{
+  "volume": 0,
+  "pet_name": "สมศรี",
+  "pet_image": "C:\\Users\\pongn\\OneDrive\\Desktop\\TAMATOTS\\assets\\images\\tama.png",
+  "stats": {
+    "hunger": 98.83949101803789,
+    "clean": 99.65810253254308,
+    "fun": 78.43996148643657,
+    "health": 99.61316367267924
+  },
+  "cfg": {
+    "decay_per_hour": {
+      "hunger": 6,
+      "clean": 5,
+      "fun": 7,
+      "health": 2
+    },
+    "min_tick_secs": 2,
+    "autosave_secs": 12
+  },
+  "poops": [],
+  "poop_cfg": {
+    "spawn_min_sec": 90,
+    "spawn_max_sec": 240,
+    "max_on_field": 5,
+    "decay_clean_per_min": 2,
+    "offline_spawn_per_hour": 1,
+    "offline_spawn_cap": 6,
+    "clean_reward": 8,
+    "coin_reward": 0
+  },
+  "last_seen": "2025-10-17T20:04:11.555255+00:00"
+}
